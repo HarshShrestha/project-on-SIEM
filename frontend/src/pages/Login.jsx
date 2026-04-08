@@ -1,5 +1,6 @@
 // src/pages/Login.jsx
 import { useState } from 'react';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { Shield, Lock, User } from 'lucide-react';
 import useStore from '../store/useStore';
 import { login } from '../services/api';
@@ -9,7 +10,13 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { setAuth } = useStore();
+  const { token, setAuth } = useStore();
+  const navigate = useNavigate();
+
+  // If already authenticated, redirect to dashboard
+  if (token) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,11 +26,13 @@ export default function Login() {
     try {
       const data = await login(username, password);
       setAuth(data.token, data.user);
+      navigate('/', { replace: true });
     } catch (err) {
       // In demo mode, accept admin/admin123
       if (username === 'admin' && password === 'admin123') {
         const demoToken = 'demo-jwt-token-' + Date.now();
         setAuth(demoToken, { username: 'admin', role: 'admin' });
+        navigate('/', { replace: true });
       } else {
         setError(err.message || 'Invalid credentials');
       }

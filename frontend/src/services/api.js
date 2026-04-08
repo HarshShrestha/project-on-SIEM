@@ -16,7 +16,8 @@ async function request(url, options = {}) {
     ...options,
   });
 
-  if (res.status === 401) {
+  // On 401, redirect to login — but NOT if we're already on an auth endpoint
+  if (res.status === 401 && !url.startsWith('/auth/')) {
     localStorage.removeItem('siem_token');
     localStorage.removeItem('siem_user');
     window.location.href = '/login';
