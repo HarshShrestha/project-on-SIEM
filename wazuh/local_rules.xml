@@ -1,0 +1,59 @@
+<!-- wazuh/local_rules.xml — Custom SIEM Detection Rules -->
+<group name="custom,siem_lab">
+
+  <!-- Rule 100001: Detect 5+ failed SSH logins from same IP in 60 seconds -->
+  <rule id="100001" level="12" frequency="5" timeframe="60">
+    <if_matched_sid>5710</if_matched_sid>
+    <same_source_ip />
+    <description>Custom: 5+ failed SSH logins from same source IP within 60 seconds — possible brute force attack.</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,brute_force,</group>
+  </rule>
+
+  <!-- Rule 100002: Detect new user account creation -->
+  <rule id="100002" level="8">
+    <if_sid>5902</if_sid>
+    <match>useradd|adduser</match>
+    <description>Custom: New user account created on the system.</description>
+    <mitre>
+      <id>T1136.001</id>
+    </mitre>
+    <group>account_creation,</group>
+  </rule>
+
+  <!-- Rule 100003: Detect sudo privilege escalation attempt -->
+  <rule id="100003" level="10">
+    <if_sid>5401,5402</if_sid>
+    <match>sudo</match>
+    <description>Custom: Sudo privilege escalation attempt detected.</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>privilege_escalation,</group>
+  </rule>
+
+  <!-- Rule 100004: Detect SSH root login attempt -->
+  <rule id="100004" level="10">
+    <if_sid>5710</if_sid>
+    <user>root</user>
+    <description>Custom: Direct SSH login attempt as root user.</description>
+    <mitre>
+      <id>T1078.003</id>
+    </mitre>
+    <group>authentication_failures,</group>
+  </rule>
+
+  <!-- Rule 100005: Detect critical file modification -->
+  <rule id="100005" level="12">
+    <if_sid>550,553</if_sid>
+    <match>/etc/passwd|/etc/shadow|/etc/sudoers</match>
+    <description>Custom: Critical system file modified — possible unauthorized change.</description>
+    <mitre>
+      <id>T1565.001</id>
+    </mitre>
+    <group>file_integrity,</group>
+  </rule>
+
+</group>

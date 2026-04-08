@@ -1,0 +1,15 @@
+# SIEM Home Lab — Git Ignore
+node_modules/
+dist/
+build/
+logs/
+*.log
+.env
+!.env.example
+certs/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
