@@ -3,14 +3,16 @@ import { create } from 'zustand';
 
 const useStore = create((set, get) => ({
   // Auth
+  // token is always null on page load; isAuthenticated is only true when a real
+  // in-memory access token exists. localStorage stores user profile for display only.
   token: null,
   user: JSON.parse(localStorage.getItem('siem_user') || 'null'),
-  isAuthenticated: !!localStorage.getItem('siem_user'),
-  isLoading: false, // Changed to false to prevent initial spinner flashes!
-  
+  isAuthenticated: false, // Always starts false; set to true only after a valid token is obtained
+  isLoading: !!localStorage.getItem('siem_user'), // Show spinner only if we have a stored session to restore
+
   setAuth: (token, user) => {
-    localStorage.setItem('siem_user', JSON.stringify(user));
-    set({ token, user, isAuthenticated: true, isLoading: false });
+    if (user) localStorage.setItem('siem_user', JSON.stringify(user));
+    set({ token, user: user ?? JSON.parse(localStorage.getItem('siem_user') || 'null'), isAuthenticated: !!token, isLoading: false });
   },
   clearAuth: () => {
     localStorage.removeItem('siem_user');

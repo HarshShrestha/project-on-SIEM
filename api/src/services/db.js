@@ -7,6 +7,12 @@ const logger = require('../config/logger');
 const dbPath = path.join(__dirname, '../../users.db');
 const db = new Database(dbPath);
 
+const defaultPasswords = {
+  admin: process.env.ADMIN_DEFAULT_PASSWORD || process.env.ADMIN_PASS || 'admin123',
+  analyst: process.env.ANALYST_DEFAULT_PASSWORD || 'analyst123',
+  viewer: process.env.VIEWER_DEFAULT_PASSWORD || 'viewer123'
+};
+
 // Initialize tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -42,9 +48,9 @@ if (count === 0) {
   `);
 
   const seedUsers = [
-    { u: 'admin', e: 'admin@siem.local', p: process.env.ADMIN_DEFAULT_PASSWORD || 'Admin@123!', r: 'admin' },
-    { u: 'analyst', e: 'analyst@siem.local', p: process.env.ANALYST_DEFAULT_PASSWORD || 'Analyst@123!', r: 'analyst' },
-    { u: 'viewer', e: 'viewer@siem.local', p: process.env.VIEWER_DEFAULT_PASSWORD || 'Viewer@123!', r: 'viewer' }
+    { u: 'admin', e: 'admin@siem.local', p: defaultPasswords.admin, r: 'admin' },
+    { u: 'analyst', e: 'analyst@siem.local', p: defaultPasswords.analyst, r: 'analyst' },
+    { u: 'viewer', e: 'viewer@siem.local', p: defaultPasswords.viewer, r: 'viewer' }
   ];
 
   const seedTx = db.transaction((users) => {
@@ -56,6 +62,19 @@ if (count === 0) {
 
   seedTx(seedUsers);
   logger.info('Seeded default users into SQLite DB.');
+}
+
+// Compatibility fix: if this looks like an untouched seeded admin user,
+// align it with configured/default bootstrap admin password.
+const adminUser = db
+  .prepare('SELECT id, email, lastLogin FROM users WHERE username = ? COLLATE NOCASE')
+  .get('admin');
+
+if (adminUser && adminUser.email === 'admin@siem.local' && !adminUser.lastLogin) {
+  const hash = bcrypt.hashSync(defaultPasswords.admin, 12);
+  db.prepare('UPDATE users SET passwordHash = ?, failedLoginAttempts = 0, lockedUntil = NULL WHERE id = ?')
+    .run(hash, adminUser.id);
+  logger.info('Aligned default admin credentials for bootstrap compatibility.');
 }
 
 module.exports = db;

@@ -3,6 +3,21 @@ import mockData from './mockData';
 
 let getTokens = () => ({ accessToken: null });
 let refreshInterceptorFn = null;
+let refreshRequestPromise = null;
+
+const refreshAccessTokenOnce = async () => {
+  if (!refreshInterceptorFn) {
+    throw new Error('Refresh interceptor is not initialized');
+  }
+
+  if (!refreshRequestPromise) {
+    refreshRequestPromise = refreshInterceptorFn().finally(() => {
+      refreshRequestPromise = null;
+    });
+  }
+
+  return refreshRequestPromise;
+};
 
 export const injectAuthHooks = (getTokensFn, refreshFn) => {
   getTokens = getTokensFn;
@@ -10,7 +25,7 @@ export const injectAuthHooks = (getTokensFn, refreshFn) => {
 };
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   withCredentials: true // Extremely important to let cookie pass through for refresh
 });
 
@@ -38,7 +53,7 @@ api.interceptors.response.use(
       
       if (refreshInterceptorFn) {
         try {
-          const newAccessToken = await refreshInterceptorFn();
+          const newAccessToken = await refreshAccessTokenOnce();
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
           return api(originalRequest);
         } catch (refreshError) {
@@ -59,7 +74,15 @@ export const fetchAlerts = async (params) => {
     return res.data;
   } catch (e) {
     console.warn("Backend /alerts unavailable, using mock data...");
-    return mockData.generateMockAlerts(50);
+    const page = Number(params?.page) || 1;
+    const limit = Math.min(Number(params?.limit) || 50, 500);
+    const alerts = mockData.generateMockAlerts(limit);
+    return {
+      alerts,
+      total: alerts.length,
+      page,
+      pages: 1,
+    };
   }
 };
 

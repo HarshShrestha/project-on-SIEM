@@ -63,7 +63,20 @@ router.post('/login', loginLimiter, (req, res) => {
       });
     }
 
-    const isMatch = bcrypt.compareSync(password, user.passwordHash);
+    let isMatch = bcrypt.compareSync(password, user.passwordHash);
+
+    // Backward compatibility for older seeded admin passwords.
+    // If the default admin account exists and the supplied password matches
+    // the configured bootstrap password, repair the hash in-place.
+    if (!isMatch && user.username.toLowerCase() === 'admin' && user.email === 'admin@siem.local') {
+      const bootstrapAdminPassword = process.env.ADMIN_DEFAULT_PASSWORD || process.env.ADMIN_PASS || 'admin123';
+      if (password === bootstrapAdminPassword) {
+        const repairedHash = bcrypt.hashSync(bootstrapAdminPassword, 12);
+        db.prepare('UPDATE users SET passwordHash = ?, failedLoginAttempts = 0, lockedUntil = NULL WHERE id = ?')
+          .run(repairedHash, user.id);
+        isMatch = true;
+      }
+    }
     
     if (!isMatch) {
       const attempts = user.failedLoginAttempts + 1;

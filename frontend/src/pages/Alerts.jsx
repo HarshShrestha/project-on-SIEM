@@ -186,27 +186,35 @@ export default function Alerts() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedAlerts.map((alert, i) => (
-                    <tr key={alert.id || i} onClick={() => setSelectedAlert(alert)}>
-                      <td style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {format(new Date(alert.timestamp), 'MMM d, HH:mm:ss')}
-                      </td>
-                      <td><span style={{ color: 'var(--accent)' }}>{alert.agent?.name}</span></td>
-                      <td style={{ fontFamily: 'monospace' }}>{alert.rule?.id}</td>
-                      <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {alert.rule?.description}
-                      </td>
-                      <td><SeverityBadge level={alert.rule?.level} severity={alert.severity} /></td>
-                      <td>
-                        {alert.rule?.mitre?.id?.[0] && <span className="mitre-tag">{alert.rule.mitre.id[0]}</span>}
-                      </td>
-                      <td>
-                        <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem' }}>
-                          View
-                        </button>
+                  {sortedAlerts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 1rem' }}>
+                        No alerts found for the selected filters.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    sortedAlerts.map((alert, i) => (
+                      <tr key={alert.id || i} onClick={() => setSelectedAlert(alert)}>
+                        <td style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                          {format(new Date(alert.timestamp), 'MMM d, HH:mm:ss')}
+                        </td>
+                        <td><span style={{ color: 'var(--accent)' }}>{alert.agent?.name}</span></td>
+                        <td style={{ fontFamily: 'monospace' }}>{alert.rule?.id}</td>
+                        <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {alert.rule?.description}
+                        </td>
+                        <td><SeverityBadge level={alert.rule?.level} severity={alert.severity} /></td>
+                        <td>
+                          {alert.rule?.mitre?.id?.[0] && <span className="mitre-tag">{alert.rule.mitre.id[0]}</span>}
+                        </td>
+                        <td>
+                          <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem' }}>
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

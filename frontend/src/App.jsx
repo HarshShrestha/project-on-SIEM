@@ -74,6 +74,7 @@ function ProtectedLayout() {
           <Routes>
             <Route element={<PrivateRoute requiredRole="viewer" />}>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Navigate to="/" replace />} />
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/agents" element={<Agents />} />
               <Route path="/settings" element={<Settings />} />

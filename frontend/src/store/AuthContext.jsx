@@ -1,6 +1,21 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import useStore from './useStore';
 import api from '../services/api';
+
+let hydrationRefreshPromise = null;
+
+const refreshAccessTokenSingleFlight = async () => {
+  if (!hydrationRefreshPromise) {
+    hydrationRefreshPromise = api
+      .post('/auth/refresh')
+      .then((response) => response.data.accessToken)
+      .finally(() => {
+        hydrationRefreshPromise = null;
+      });
+  }
+
+  return hydrationRefreshPromise;
+};
 
 export const useAuth = () => {
   const store = useStore();
@@ -20,10 +35,10 @@ export const useAuth = () => {
   };
 
   const refreshAccessToken = async () => {
-    const response = await api.post('/auth/refresh');
+    const accessToken = await refreshAccessTokenSingleFlight();
     // If the API rotated the token successfully
-    store.setAuth(response.data.accessToken, store.user);
-    return response.data.accessToken;
+    store.setAuth(accessToken, store.user);
+    return accessToken;
   };
 
   return {
@@ -38,32 +53,35 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const { setAuth, clearAuth, setLoading } = useStore();
+  const { setAuth, clearAuth, setLoading, user } = useStore();
 
   useEffect(() => {
+    // Only attempt silent token refresh if we have a stored user session.
+    // isLoading starts `true` in the store when a session exists, so PrivateRoute
+    // will show a spinner until this resolves.
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     let mounted = true;
-    const fetchUser = async () => {
+    const hydrate = async () => {
+      setLoading(true);
       try {
-        const response = await api.get('/auth/me');
+        const accessToken = await refreshAccessTokenSingleFlight();
         if (mounted) {
-          // The interceptor might have called refresh internally.
-          // By the time it gets here, the request was successful.
-          // However, we need to know the new token if it was refreshed?
-          // The interceptor doesn't mutate getState if we only passed functions.
-          // But actually, we don't strictly need to do this manually if the browser gets the session.
-          // We can just rely on the API.
-          setAuth(response.data.accessToken || null, response.data);
+          // Got a fresh access token — mark fully authenticated
+          setAuth(accessToken, user);
         }
-      } catch (err) {
+      } catch {
+        // Refresh cookie gone/expired — clear stale localStorage entry
         if (mounted) clearAuth();
-      } finally {
-        if (mounted) setLoading(false);
       }
     };
 
-    fetchUser();
+    hydrate();
     return () => { mounted = false; };
-  }, [setAuth, clearAuth, setLoading]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <>{children}</>;
 };

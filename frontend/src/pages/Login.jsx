@@ -1,7 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext';
 import './Login.css';
+
+const getSafeRedirectPath = (path) => {
+  if (!path || path === '/login' || path === '/register' || path === '/dashboard') {
+    return '/';
+  }
+
+  return path;
+};
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -14,8 +22,32 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setIsSubmitting(true);
+    
+    try {
+      await login(username, password);
+      const from = getSafeRedirectPath(location.state?.from?.pathname);
+      navigate(from, { replace: true });
+    } catch (err) {
+      if (!err.response) {
+        setErrorMsg('Cannot reach API server. Start backend on port 3001 and try again.');
+      } else if (err.response?.status === 423) {
+        setErrorMsg(err.response.data.error || 'Account locked. Try again later.');
+      } else if (err.response?.status === 401) {
+        setErrorMsg('Invalid credentials');
+      } else {
+        setErrorMsg(err.response?.data?.error || 'Login failed. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (isAuthenticated && !isLoading) {
-    const from = location.state?.from?.pathname || '/';
+    const from = getSafeRedirectPath(location.state?.from?.pathname);
     return <Navigate to={from} replace />;
   }
 
@@ -26,26 +58,6 @@ const Login = () => {
       </div>
     );
   }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setIsSubmitting(true);
-    
-    try {
-      await login(username, password);
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
-    } catch (err) {
-      if (err.response?.status === 423) {
-        setErrorMsg(err.response.data.error || 'Account locked. Try again later.');
-      } else {
-        setErrorMsg('Invalid credentials');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
     <div className="login-container">
