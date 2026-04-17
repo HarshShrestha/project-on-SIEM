@@ -38,6 +38,8 @@ const Login = () => {
         setErrorMsg(err.response.data.error || 'Account locked. Try again later.');
       } else if (err.response?.status === 401) {
         setErrorMsg('Invalid credentials');
+      } else if (err.response?.status >= 500) {
+        setErrorMsg(`Backend is unavailable (HTTP ${err.response.status}). Check API/nginx deployment logs.`);
       } else {
         setErrorMsg(err.response?.data?.error || 'Login failed. Please try again.');
       }
