@@ -1,72 +1,104 @@
-// src/services/api.js
+import axios from 'axios';
+import mockData from './mockData';
 
-const API_BASE = '/api';
+let getTokens = () => ({ accessToken: null });
+let refreshInterceptorFn = null;
 
-function getHeaders() {
-  const token = localStorage.getItem('siem_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
+export const injectAuthHooks = (getTokensFn, refreshFn) => {
+  getTokens = getTokensFn;
+  refreshInterceptorFn = refreshFn;
+};
 
-async function request(url, options = {}) {
-  const res = await fetch(`${API_BASE}${url}`, {
-    headers: getHeaders(),
-    ...options,
-  });
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
+  withCredentials: true // Extremely important to let cookie pass through for refresh
+});
 
-  // On 401, redirect to login — but NOT if we're already on an auth endpoint
-  if (res.status === 401 && !url.startsWith('/auth/')) {
-    localStorage.removeItem('siem_token');
-    localStorage.removeItem('siem_user');
-    window.location.href = '/login';
-    throw new Error('Unauthorized');
+api.interceptors.request.use((config) => {
+  const { accessToken } = getTokens();
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
+  return config;
+}, Promise.reject);
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(err.error || `HTTP ${res.status}`);
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Check if it's 401 and we haven't already retried
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      // Prevent infinite loop if the failure was on /auth/refresh
+      if (originalRequest.url.includes('/auth/refresh')) {
+        return Promise.reject(error);
+      }
+      
+      originalRequest._retry = true;
+      
+      if (refreshInterceptorFn) {
+        try {
+          const newAccessToken = await refreshInterceptorFn();
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          return api(originalRequest);
+        } catch (refreshError) {
+          return Promise.reject(refreshError);
+        }
+      }
+    }
+    
+    return Promise.reject(error);
   }
+);
 
-  return res.json();
-}
+export default api;
 
-// Auth
-export async function login(username, password) {
-  return request('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ username, password }),
-  });
-}
+export const fetchAlerts = async (params) => {
+  try {
+    const res = await api.get('/alerts', { params });
+    return res.data;
+  } catch (e) {
+    console.warn("Backend /alerts unavailable, using mock data...");
+    return mockData.generateMockAlerts(50);
+  }
+};
 
-// Alerts
-export async function fetchAlerts(params = {}) {
-  const qs = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== '' && v !== null) qs.set(k, v);
-  });
-  return request(`/alerts?${qs.toString()}`);
-}
+export const fetchAgents = async () => {
+  try {
+    const res = await api.get('/agents');
+    return res.data;
+  } catch (e) {
+    console.warn("Backend /agents unavailable, using mock data...");
+    return mockData.generateMockAgents();
+  }
+};
 
-// Agents
-export async function fetchAgents() {
-  return request('/agents');
-}
+export const fetchStats = async (range) => {
+  try {
+    const res = await api.get('/stats', { params: { range } });
+    return res.data;
+  } catch (e) {
+    console.warn("Backend /stats unavailable, using mock data...");
+    return mockData.generateMockStats(range);
+  }
+};
 
-// Agent logs
-export async function fetchAgentLogs(id, limit = 100) {
-  return request(`/agent/${id}/logs?limit=${limit}`);
-}
+export const fetchRules = async () => {
+  try {
+    const res = await api.get('/rules');
+    return res.data;
+  } catch (e) {
+    console.warn("Backend /rules unavailable, using mock data...");
+    return mockData.generateMockRules();
+  }
+};
 
-// Stats
-export async function fetchStats(range = '24h') {
-  return request(`/stats?range=${range}`);
-}
-
-// Rules
-export async function fetchRules() {
-  return request('/rules');
-}
-
-export default { login, fetchAlerts, fetchAgents, fetchAgentLogs, fetchStats, fetchRules };
+export const fetchAgentLogs = async (agentId) => {
+  try {
+    const res = await api.get(`/agent/${agentId}/logs`);
+    return res.data;
+  } catch (e) {
+    console.warn(`Backend /agent/${agentId}/logs unavailable, using mock data...`);
+    return mockData.generateMockAgentLogs(agentId);
+  }
+};

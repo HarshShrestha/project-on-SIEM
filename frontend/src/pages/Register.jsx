@@ -1,22 +1,22 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext';
-import './Login.css';
+import api from '../services/api';
+import './Login.css'; // Reusing the same CSS
 
-const Login = () => {
+const Register = () => {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { login, isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   if (isAuthenticated && !isLoading) {
-    const from = location.state?.from?.pathname || '/';
-    return <Navigate to={from} replace />;
+    return <Navigate to="/" replace />;
   }
 
   if (isLoading) {
@@ -33,14 +33,15 @@ const Login = () => {
     setIsSubmitting(true);
     
     try {
-      await login(username, password);
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      await api.post('/auth/register', { username, email, password });
+      navigate('/login', { replace: true });
     } catch (err) {
-      if (err.response?.status === 423) {
-        setErrorMsg(err.response.data.error || 'Account locked. Try again later.');
+      if (err.response?.status === 409) {
+        setErrorMsg('Username or email already exists');
+      } else if (err.response?.data?.issues) {
+        setErrorMsg(err.response.data.issues[0]?.message || 'Validation failed');
       } else {
-        setErrorMsg('Invalid credentials');
+        setErrorMsg(err.response?.data?.error || 'Failed to register');
       }
     } finally {
       setIsSubmitting(false);
@@ -51,7 +52,7 @@ const Login = () => {
     <div className="login-container">
       <div className="login-card">
         <h2 className="login-title">SIEM Home Lab</h2>
-        <p className="login-subtitle">Sign in to your account</p>
+        <p className="login-subtitle">Create a new viewer account</p>
 
         {errorMsg && <div className="login-error">{errorMsg}</div>}
 
@@ -63,6 +64,18 @@ const Login = () => {
               type="text" 
               value={username} 
               onChange={e => setUsername(e.target.value)} 
+              required 
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="email">Email</label>
+            <input 
+              id="email"
+              type="email" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
               required 
               disabled={isSubmitting}
             />
@@ -88,20 +101,23 @@ const Login = () => {
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
+            <small style={{ color: '#888', display: 'block', marginTop: '0.5rem', fontSize: '0.75rem' }}>
+              Min 8 chars, 1 uppercase, 1 number
+            </small>
           </div>
 
           <div className="form-actions">
             <button 
               type="button" 
               className="forgot-password"
-              onClick={() => navigate('/register')}
+              onClick={() => navigate('/login')}
             >
-              Need an account? Sign up
+              Already have an account? Sign in
             </button>
           </div>
 
           <button type="submit" className="login-btn" disabled={isSubmitting}>
-            {isSubmitting ? <span className="spinner"></span> : 'Sign In'}
+            {isSubmitting ? <span className="spinner"></span> : 'Sign Up'}
           </button>
         </form>
       </div>
@@ -109,4 +125,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Register;

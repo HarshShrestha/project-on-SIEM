@@ -7,10 +7,11 @@ const helmet = require('helmet');
 const cors = require('cors');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 const { WebSocketServer } = require('ws');
 
 const logger = require('./config/logger');
-const { verifyToken } = require('./middleware/auth');
+const { verifyToken, requireRole } = require('./middleware/auth');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const requestLogger = require('./middleware/requestLogger');
 const wazuh = require('./services/wazuh');
@@ -22,6 +23,8 @@ const agentRoutes = require('./routes/agents');
 const statsRoutes = require('./routes/stats');
 const rulesRoutes = require('./routes/rules');
 const healthRoutes = require('./routes/health');
+const usersRoutes = require('./routes/users');
+const auditLogRoutes = require('./routes/auditLog');
 
 const app = express();
 const server = http.createServer(app);
@@ -44,6 +47,7 @@ app.use(cors({
 
 app.use(compression());
 app.use(express.json());
+app.use(cookieParser());
 app.use(requestLogger);
 
 // Rate limiter — 100 requests per minute per IP
@@ -61,12 +65,14 @@ app.use('/api/', limiter);
 app.use('/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 
-// Protected
-app.use('/api/alerts', verifyToken, alertRoutes);
-app.use('/api/agents', verifyToken, agentRoutes);
-app.use('/api/agent', verifyToken, agentRoutes);
-app.use('/api/stats', verifyToken, statsRoutes);
-app.use('/api/rules', verifyToken, rulesRoutes);
+// Protected (with RBAC baseline)
+app.use('/api/alerts', verifyToken, requireRole('viewer'), alertRoutes);
+app.use('/api/agents', verifyToken, requireRole('viewer'), agentRoutes);
+app.use('/api/agent', verifyToken, requireRole('viewer'), agentRoutes);
+app.use('/api/stats', verifyToken, requireRole('viewer'), statsRoutes);
+app.use('/api/rules', verifyToken, requireRole('analyst'), rulesRoutes);
+app.use('/api/users', usersRoutes); // Internally requires admin
+app.use('/api/audit-log', auditLogRoutes); // Internally requires admin
 
 // Error handling
 app.use(notFoundHandler);
