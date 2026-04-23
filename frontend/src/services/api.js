@@ -92,7 +92,7 @@ export const fetchAgents = async () => {
     return res.data;
   } catch (e) {
     console.warn("Backend /agents unavailable, using mock data...");
-    return mockData.generateMockAgents();
+    return { agents: mockData.generateMockAgents() };
   }
 };
 
@@ -112,7 +112,7 @@ export const fetchRules = async () => {
     return res.data;
   } catch (e) {
     console.warn("Backend /rules unavailable, using mock data...");
-    return mockData.generateMockRules();
+    return { rules: mockData.generateMockRules() };
   }
 };
 
@@ -122,6 +122,6 @@ export const fetchAgentLogs = async (agentId) => {
     return res.data;
   } catch (e) {
     console.warn(`Backend /agent/${agentId}/logs unavailable, using mock data...`);
-    return mockData.generateMockAgentLogs(agentId);
+    return { logs: mockData.generateMockAgentLogs(agentId) };
   }
 };
