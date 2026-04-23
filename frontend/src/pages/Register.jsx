@@ -41,7 +41,8 @@ const Register = () => {
       } else if (err.response?.data?.issues) {
         setErrorMsg(err.response.data.issues[0]?.message || 'Validation failed');
       } else {
-        setErrorMsg(err.response?.data?.error || 'Failed to register');
+        const errData = err.response?.data?.error;
+        setErrorMsg(typeof errData === 'string' ? errData : (errData?.message || 'Failed to register'));
       }
     } finally {
       setIsSubmitting(false);
