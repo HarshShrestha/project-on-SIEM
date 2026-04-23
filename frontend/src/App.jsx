@@ -16,6 +16,7 @@ import UsersPage from './pages/admin/UsersPage';
 import { AuthProvider, useAuth } from './store/AuthContext';
 import { injectAuthHooks } from './services/api';
 import PrivateRoute from './components/PrivateRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -98,18 +99,20 @@ function ProtectedLayout() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AuthHooksInjector>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/*" element={<ProtectedLayout />} />
-            </Routes>
-          </BrowserRouter>
-        </AuthHooksInjector>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <AuthHooksInjector>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/*" element={<ProtectedLayout />} />
+              </Routes>
+            </BrowserRouter>
+          </AuthHooksInjector>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
