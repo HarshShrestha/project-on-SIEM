@@ -11,7 +11,11 @@ const cookieParser = require('cookie-parser');
 const { WebSocketServer } = require('ws');
 
 const logger = require('./config/logger');
+const { connectDB } = require('./services/db');
 const { verifyToken, requireRole } = require('./middleware/auth');
+
+// Initialize DB connection
+connectDB();
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const requestLogger = require('./middleware/requestLogger');
 const wazuh = require('./services/wazuh');

@@ -2,7 +2,10 @@
 import { useEffect, useRef, useCallback } from 'react';
 import useStore from '../store/useStore';
 
-const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/alerts`;
+const DEFAULT_WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/alerts`;
+const WS_URL = import.meta.env.VITE_WS_URL || DEFAULT_WS_URL;
+const isHostedFrontend = window.location.hostname.endsWith('vercel.app');
+const shouldDisableDefaultWsOnHosted = !import.meta.env.VITE_WS_URL && isHostedFrontend;
 
 export default function useWebSocket() {
   const wsRef = useRef(null);
@@ -48,12 +51,18 @@ export default function useWebSocket() {
   }, [setWsConnected, addLiveAlerts, incrementAlertCount]);
 
   useEffect(() => {
+    if (shouldDisableDefaultWsOnHosted) {
+      setWsConnected(false);
+      console.warn('[WS] Disabled on hosted frontend. Set VITE_WS_URL to your backend websocket endpoint.');
+      return undefined;
+    }
+
     connect();
     return () => {
       clearTimeout(reconnectTimer.current);
       if (wsRef.current) wsRef.current.close();
     };
-  }, [connect]);
+  }, [connect, setWsConnected]);
 
   return wsRef;
 }

@@ -3,12 +3,12 @@ const express = require('express');
 const { z } = require('zod');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const db = require('../services/db');
+const User = require('../models/User');
+const RefreshToken = require('../models/RefreshToken');
 const { logAuditEvent } = require('../services/audit');
 const { signToken, verifyToken } = require('../middleware/auth');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
-// Using crypto.randomUUID() inline
 
 const LOCKOUT_MINUTES = 15;
 const MAX_FAILURES = 5;
@@ -34,14 +34,14 @@ const registerSchema = z.object({
     .regex(/[0-9]/, 'Must contain at least one number')
 });
 
-router.post('/login', loginLimiter, (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = loginSchema.parse(req.body);
     
     // Sanitize just in case, though zod string handles it basically
     const sanitizedUsername = username.replace(/<\/?[^>]+(>|$)/g, "");
 
-    const user = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(sanitizedUsername);
+    const user = await User.findOne({ username: { $regex: new RegExp(`^${sanitizedUsername}$`, 'i') } });
     
     if (!user) {
       logAuditEvent('LOGIN_FAIL', { username: sanitizedUsername }, req, { reason: 'User not found' });
@@ -72,8 +72,10 @@ router.post('/login', loginLimiter, (req, res) => {
       const bootstrapAdminPassword = process.env.ADMIN_DEFAULT_PASSWORD || process.env.ADMIN_PASS || 'admin123';
       if (password === bootstrapAdminPassword) {
         const repairedHash = bcrypt.hashSync(bootstrapAdminPassword, 12);
-        db.prepare('UPDATE users SET passwordHash = ?, failedLoginAttempts = 0, lockedUntil = NULL WHERE id = ?')
-          .run(repairedHash, user.id);
+        user.passwordHash = repairedHash;
+        user.failedLoginAttempts = 0;
+        user.lockedUntil = null;
+        await user.save();
         isMatch = true;
       }
     }
@@ -82,19 +84,22 @@ router.post('/login', loginLimiter, (req, res) => {
       const attempts = user.failedLoginAttempts + 1;
       let lockedUntil = null;
       if (attempts >= MAX_FAILURES) {
-        lockedUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60000).toISOString();
+        lockedUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60000);
         logAuditEvent('ACCOUNT_LOCKED', user, req);
       }
-      db.prepare('UPDATE users SET failedLoginAttempts = ?, lockedUntil = ? WHERE id = ?')
-        .run(attempts, lockedUntil, user.id);
+      user.failedLoginAttempts = attempts;
+      user.lockedUntil = lockedUntil;
+      await user.save();
       
       logAuditEvent('LOGIN_FAIL', user, req, { reason: 'Invalid password' });
       return res.status(401).json({ error: 'Invalid username or password', code: 'AUTH_FAILED' });
     }
 
     // Reset login failures
-    db.prepare('UPDATE users SET failedLoginAttempts = 0, lockedUntil = NULL, lastLogin = ? WHERE id = ?')
-      .run(new Date().toISOString(), user.id);
+    user.failedLoginAttempts = 0;
+    user.lockedUntil = null;
+    user.lastLogin = new Date();
+    await user.save();
 
     // Tokens
     const jti = crypto.randomUUID();
@@ -107,10 +112,13 @@ router.post('/login', loginLimiter, (req, res) => {
 
     const plainRefreshToken = crypto.randomBytes(40).toString('hex');
     const hashedRefresh = crypto.createHash('sha256').update(plainRefreshToken).digest('hex');
-    const refreshExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+    const refreshExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
     
-    db.prepare('INSERT INTO refresh_tokens (tokenHash, userId, expiresAt) VALUES (?, ?, ?)')
-      .run(hashedRefresh, user.id, refreshExpiry);
+    await RefreshToken.create({
+      tokenHash: hashedRefresh,
+      userId: user.id,
+      expiresAt: refreshExpiry
+    });
 
     res.cookie('refreshToken', plainRefreshToken, {
       httpOnly: true,
@@ -127,19 +135,20 @@ router.post('/login', loginLimiter, (req, res) => {
     });
 
   } catch (err) {
+    console.error("Login Error:", err);
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', issues: err.issues });
     }
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 
-router.post('/register', loginLimiter, (req, res) => {
+router.post('/register', loginLimiter, async (req, res) => {
   try {
     const { username, email, password } = registerSchema.parse(req.body);
     const sanitizedUsername = username.replace(/<\/?[^>]+(>|$)/g, "");
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE username = ? OR email = ?').get(sanitizedUsername, email);
+    const existingUser = await User.findOne({ $or: [{ username: sanitizedUsername }, { email }] });
     if (existingUser) {
       return res.status(409).json({ error: 'Username or email already exists' });
     }
@@ -147,8 +156,13 @@ router.post('/register', loginLimiter, (req, res) => {
     const hash = bcrypt.hashSync(password, 12);
     const newId = crypto.randomUUID();
     
-    db.prepare('INSERT INTO users (id, username, email, passwordHash, role) VALUES (?, ?, ?, ?, ?)')
-      .run(newId, sanitizedUsername, email, hash, 'viewer');
+    await User.create({
+      id: newId,
+      username: sanitizedUsername,
+      email,
+      passwordHash: hash,
+      role: 'viewer'
+    });
       
     logAuditEvent('REGISTER_SUCCESS', { id: newId, username: sanitizedUsername, role: 'viewer' }, req);
     res.status(201).json({ message: 'User registered successfully' });
@@ -160,75 +174,88 @@ router.post('/register', loginLimiter, (req, res) => {
   }
 });
 
-router.post('/refresh', (req, res) => {
-  const plainToken = req.cookies?.refreshToken;
-  if (!plainToken) return res.status(401).json({ error: 'No refresh token provided' });
-  
-  const tokenParams = db.prepare('SELECT * FROM refresh_tokens WHERE tokenHash = ? OR tokenHash = ? LIMIT 1');
-  
-  // Timing safe equal simulation: fetch by both, then purely timing-safe check
-  const hashedRefresh = crypto.createHash('sha256').update(plainToken).digest('hex');
-  const storedToken = db.prepare('SELECT * FROM refresh_tokens WHERE tokenHash = ? AND revoked = 0').get(hashedRefresh);
-  
-  if (!storedToken) {
-    return res.status(401).json({ error: 'Invalid or revoked refresh token' });
-  }
-
-  if (new Date(storedToken.expiresAt) < new Date()) {
-    db.prepare('DELETE FROM refresh_tokens WHERE tokenHash = ?').run(storedToken.tokenHash);
-    return res.status(401).json({ error: 'Refresh token expired' });
-  }
-
-  // Token rotation
-  db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE tokenHash = ?').run(storedToken.tokenHash);
-
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(storedToken.userId);
-  if (!user || !user.isActive) {
-    return res.status(401).json({ error: 'User invalid' });
-  }
-
-  const jti = crypto.randomUUID();
-  const newAccessToken = signToken({ 
-    sub: user.id, 
-    username: user.username, 
-    role: user.role, 
-    jti 
-  }, { expiresIn: '15m' });
-
-  const newPlainRefreshToken = crypto.randomBytes(40).toString('hex');
-  const newHashedRefresh = crypto.createHash('sha256').update(newPlainRefreshToken).digest('hex');
-  const newRefreshExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  
-  db.prepare('INSERT INTO refresh_tokens (tokenHash, userId, expiresAt) VALUES (?, ?, ?)')
-    .run(newHashedRefresh, user.id, newRefreshExpiry);
-
-  res.cookie('refreshToken', newPlainRefreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Strict',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  });
-
-  logAuditEvent('TOKEN_REFRESH', user, req);
-
-  res.json({ accessToken: newAccessToken });
-});
-
-router.post('/logout', (req, res) => {
-  const plainToken = req.cookies?.refreshToken;
-  if (plainToken) {
+router.post('/refresh', async (req, res) => {
+  try {
+    const plainToken = req.cookies?.refreshToken;
+    if (!plainToken) return res.status(401).json({ error: 'No refresh token provided' });
+    
     const hashedRefresh = crypto.createHash('sha256').update(plainToken).digest('hex');
-    db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE tokenHash = ?').run(hashedRefresh);
+    const storedToken = await RefreshToken.findOne({ tokenHash: hashedRefresh, revoked: false });
+    
+    if (!storedToken) {
+      return res.status(401).json({ error: 'Invalid or revoked refresh token' });
+    }
+
+    if (new Date(storedToken.expiresAt) < new Date()) {
+      await RefreshToken.deleteOne({ tokenHash: storedToken.tokenHash });
+      return res.status(401).json({ error: 'Refresh token expired' });
+    }
+
+    // Token rotation
+    storedToken.revoked = true;
+    await storedToken.save();
+
+    const user = await User.findOne({ id: storedToken.userId });
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: 'User invalid' });
+    }
+
+    const jti = crypto.randomUUID();
+    const newAccessToken = signToken({ 
+      sub: user.id, 
+      username: user.username, 
+      role: user.role, 
+      jti 
+    }, { expiresIn: '15m' });
+
+    const newPlainRefreshToken = crypto.randomBytes(40).toString('hex');
+    const newHashedRefresh = crypto.createHash('sha256').update(newPlainRefreshToken).digest('hex');
+    const newRefreshExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    
+    await RefreshToken.create({
+      tokenHash: newHashedRefresh,
+      userId: user.id,
+      expiresAt: newRefreshExpiry
+    });
+
+    res.cookie('refreshToken', newPlainRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'Strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    logAuditEvent('TOKEN_REFRESH', user, req);
+
+    res.json({ accessToken: newAccessToken });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
   }
-  res.clearCookie('refreshToken', { httpOnly: true, sameSite: 'Strict' });
-  logAuditEvent('LOGOUT', {}, req);
-  res.json({ message: 'Logged out' });
 });
 
-router.get('/me', verifyToken, (req, res) => {
-  const user = db.prepare('SELECT id, username, email, role, lastLogin FROM users WHERE id = ?').get(req.user.sub);
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  res.json(user);
+router.post('/logout', async (req, res) => {
+  try {
+    const plainToken = req.cookies?.refreshToken;
+    if (plainToken) {
+      const hashedRefresh = crypto.createHash('sha256').update(plainToken).digest('hex');
+      await RefreshToken.updateOne({ tokenHash: hashedRefresh }, { revoked: true });
+    }
+    res.clearCookie('refreshToken', { httpOnly: true, sameSite: 'Strict' });
+    logAuditEvent('LOGOUT', {}, req);
+    res.json({ message: 'Logged out' });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/me', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findOne({ id: req.user.sub }, 'id username email role lastLogin');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 const changePasswordSchema = z.object({
@@ -243,20 +270,22 @@ const changePasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
-router.post('/change-password', verifyToken, (req, res) => {
+router.post('/change-password', verifyToken, async (req, res) => {
   try {
     const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.sub);
+    const user = await User.findOne({ id: req.user.sub });
     
     if (!bcrypt.compareSync(currentPassword, user.passwordHash)) {
       return res.status(400).json({ error: 'Incorrect current password' });
     }
 
     const newHash = bcrypt.hashSync(newPassword, 12);
-    db.prepare('UPDATE users SET passwordHash = ?, mustChangePassword = 0 WHERE id = ?').run(newHash, user.id);
+    user.passwordHash = newHash;
+    user.mustChangePassword = false;
+    await user.save();
     
     // Revoke all existing refresh tokens
-    db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE userId = ?').run(user.id);
+    await RefreshToken.updateMany({ userId: user.id }, { revoked: true });
 
     logAuditEvent('PASSWORD_CHANGE', user, req);
     res.json({ message: 'Password changed successfully' });

@@ -80,6 +80,8 @@ services:
     container_name: siem-api-server
     hostname: api-server
     restart: unless-stopped
+    env_file:
+      - ./api/.env
     environment:
       - WAZUH_HOST=https://wazuh-manager
       - WAZUH_PORT=55000
