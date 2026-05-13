@@ -72,6 +72,29 @@ services:
       - internal
       - external
 
+  # ─── MongoDB ───────────────────────────────────────────
+  mongodb:
+    image: mongo:latest
+    container_name: siem-mongodb
+    hostname: mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: siem-homelab
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal
+
   # ─── API Server (Node.js) ──────────────────────────────
   api-server:
     build:
@@ -83,6 +106,7 @@ services:
     env_file:
       - ./api/.env
     environment:
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/siem-homelab?authSource=admin
       - WAZUH_HOST=https://wazuh-manager
       - WAZUH_PORT=55000
       - WAZUH_USER=${WAZUH_USER:-wazuh-wui}
@@ -101,6 +125,7 @@ services:
       start_period: 10s
     depends_on:
       - wazuh-manager
+      - mongodb
     networks:
       - internal
 
@@ -128,6 +153,7 @@ volumes:
   wazuh_etc:
   wazuh_logs:
   indexer_data:
+  mongodb_data:
 
 networks:
   internal:
