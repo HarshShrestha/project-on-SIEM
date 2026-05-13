@@ -71,7 +71,13 @@ export default api;
 export const fetchAlerts = async (params) => {
   try {
     const res = await api.get('/alerts', { params });
-    return res.data;
+    const payload = res?.data || {};
+    return {
+      alerts: Array.isArray(payload.alerts) ? payload.alerts : [],
+      total: Number.isFinite(payload.total) ? payload.total : 0,
+      page: Number.isFinite(payload.page) ? payload.page : 1,
+      pages: Number.isFinite(payload.pages) ? payload.pages : 1,
+    };
   } catch (e) {
     console.warn("Backend /alerts unavailable, using mock data...");
     const page = Number(params?.page) || 1;
@@ -89,7 +95,10 @@ export const fetchAlerts = async (params) => {
 export const fetchAgents = async () => {
   try {
     const res = await api.get('/agents');
-    return res.data;
+    const payload = res?.data || {};
+    return {
+      agents: Array.isArray(payload.agents) ? payload.agents : [],
+    };
   } catch (e) {
     console.warn("Backend /agents unavailable, using mock data...");
     return { agents: mockData.generateMockAgents() };

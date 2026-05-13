@@ -53,7 +53,7 @@ export default function Dashboard() {
     queryFn: async () => {
       try {
         const res = await fetchAlerts({ limit: 20 });
-        return res.alerts;
+        return Array.isArray(res?.alerts) ? res.alerts : generateMockAlerts(20, 24);
       } catch {
         return generateMockAlerts(20, 24);
       }
@@ -67,7 +67,7 @@ export default function Dashboard() {
     queryFn: async () => {
       try {
         const res = await fetchAgents();
-        return res.agents;
+        return Array.isArray(res?.agents) ? res.agents : generateMockAgents();
       } catch {
         return generateMockAgents();
       }

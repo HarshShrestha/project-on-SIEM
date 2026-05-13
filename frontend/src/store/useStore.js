@@ -1,13 +1,17 @@
 // src/store/useStore.js
 import { create } from 'zustand';
 
+const isHostedFrontend = typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app');
+const hasConfiguredApi = Boolean(import.meta.env.VITE_API_URL);
+const defaultAuthMode = isHostedFrontend && !hasConfiguredApi ? 'demo' : 'real';
+
 const useStore = create((set, get) => ({
   // Auth
   // token is always null on page load; isAuthenticated is only true when a real
   // in-memory access token exists. localStorage stores user profile for display only.
   token: null,
   user: JSON.parse(localStorage.getItem('siem_user') || 'null'),
-  authMode: localStorage.getItem('siem_auth_mode') || 'real',
+  authMode: localStorage.getItem('siem_auth_mode') || defaultAuthMode,
   isAuthenticated: false, // Always starts false; set to true only after a valid token is obtained
   isLoading: !!localStorage.getItem('siem_user'), // Show spinner only if we have a stored session to restore
 
