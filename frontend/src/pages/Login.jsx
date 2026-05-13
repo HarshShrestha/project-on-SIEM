@@ -11,6 +11,8 @@ const getSafeRedirectPath = (path) => {
   return path;
 };
 
+const DEMO_LOGIN_HELP = 'Hosted demo mode is active. Use admin/admin123, analyst/analyst123, or viewer/viewer123.';
+
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -33,15 +35,15 @@ const Login = () => {
       navigate(from, { replace: true });
     } catch (err) {
       if (!err.response) {
-        setErrorMsg('Cannot reach API server. Start backend on port 3001 and try again.');
+        setErrorMsg(DEMO_LOGIN_HELP);
       } else if (err.response?.status === 423) {
         setErrorMsg(err.response.data.error || 'Account locked. Try again later.');
       } else if (err.response?.status === 401) {
         setErrorMsg('Invalid credentials');
       } else if (err.response?.status === 405) {
-        setErrorMsg('This deployment is running without a backend API. Use the demo credentials: admin/admin123, analyst/analyst123, or viewer/viewer123.');
+        setErrorMsg(DEMO_LOGIN_HELP);
       } else if (err.response?.status >= 500) {
-        setErrorMsg(`Backend is unavailable (HTTP ${err.response.status}). Check API/nginx deployment logs.`);
+        setErrorMsg(DEMO_LOGIN_HELP);
       } else {
         const errData = err.response?.data?.error || err.response?.data;
         setErrorMsg(typeof errData === 'string' ? errData : (errData?.message || 'Login failed. Please try again.'));
