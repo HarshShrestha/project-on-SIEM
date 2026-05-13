@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext';
-import api from '../services/api';
+import api, { registerHostedDemoUser, shouldUseHostedDemoMode } from '../services/api';
 import './Login.css'; // Reusing the same CSS
 
 const Register = () => {
@@ -12,7 +12,7 @@ const Register = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, login } = useAuth();
   const navigate = useNavigate();
 
   if (isAuthenticated && !isLoading) {
@@ -33,13 +33,22 @@ const Register = () => {
     setIsSubmitting(true);
     
     try {
+      if (shouldUseHostedDemoMode()) {
+        registerHostedDemoUser({ username, email, password });
+        await login(username, password);
+        navigate('/', { replace: true });
+        return;
+      }
+
       await api.post('/auth/register', { username, email, password });
       navigate('/login', { replace: true });
     } catch (err) {
-      if (err.response?.status === 409) {
+      if (err.status === 409 || err.response?.status === 409) {
         setErrorMsg('Username or email already exists');
       } else if (err.response?.data?.issues) {
         setErrorMsg(err.response.data.issues[0]?.message || 'Validation failed');
+      } else if (shouldUseHostedDemoMode()) {
+        setErrorMsg('Demo signup failed. Try a different username or email.');
       } else {
         const errData = err.response?.data?.error;
         setErrorMsg(typeof errData === 'string' ? errData : (errData?.message || 'Failed to register'));

@@ -5,6 +5,57 @@ export const isHostedFrontend = typeof window !== 'undefined' && window.location
 export const hasConfiguredApi = Boolean(import.meta.env.VITE_API_URL);
 export const shouldUseHostedDemoMode = () => isHostedFrontend && !hasConfiguredApi;
 
+const DEMO_USERS_KEY = 'siem_demo_users';
+const DEFAULT_DEMO_USERS = {
+  admin: { password: 'admin123', role: 'admin', email: 'admin@siem.local' },
+  analyst: { password: 'analyst123', role: 'analyst', email: 'analyst@siem.local' },
+  viewer: { password: 'viewer123', role: 'viewer', email: 'viewer@siem.local' },
+};
+
+const safeLocalStorageRead = (key, fallback) => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+};
+
+export const getHostedDemoUsers = () => ({
+  ...DEFAULT_DEMO_USERS,
+  ...safeLocalStorageRead(DEMO_USERS_KEY, {}),
+});
+
+export const registerHostedDemoUser = ({ username, email, password }) => {
+  const normalizedUsername = String(username || '').trim().toLowerCase();
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const demoUsers = getHostedDemoUsers();
+
+  if (!normalizedUsername || !normalizedEmail || !password) {
+    throw new Error('Missing demo signup fields');
+  }
+
+  if (demoUsers[normalizedUsername] || Object.values(demoUsers).some((user) => user.email.toLowerCase() === normalizedEmail)) {
+    const error = new Error('Username or email already exists');
+    error.status = 409;
+    throw error;
+  }
+
+  demoUsers[normalizedUsername] = {
+    password,
+    role: 'viewer',
+    email: normalizedEmail,
+  };
+
+  localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(demoUsers));
+  return {
+    username: normalizedUsername,
+    email: normalizedEmail,
+    role: 'viewer',
+  };
+};
+
+export const findHostedDemoUser = (username) => getHostedDemoUsers()[String(username || '').trim().toLowerCase()] || null;
+
 let getTokens = () => ({ accessToken: null });
 let refreshInterceptorFn = null;
 let refreshRequestPromise = null;

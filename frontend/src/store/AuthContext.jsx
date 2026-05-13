@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import useStore from './useStore';
-import api, { shouldUseHostedDemoMode } from '../services/api';
+import api, { findHostedDemoUser, shouldUseHostedDemoMode } from '../services/api';
 
 let hydrationRefreshPromise = null;
 
@@ -35,7 +35,7 @@ export const useAuth = () => {
   const login = async (username, password) => {
     if (shouldUseHostedDemoMode()) {
       const normalizedUsername = String(username || '').trim().toLowerCase();
-      const demoUser = DEMO_USERS[normalizedUsername];
+      const demoUser = findHostedDemoUser(normalizedUsername) || DEMO_USERS[normalizedUsername];
 
       if (demoUser && password === demoUser.password) {
         store.setAuth(`demo-${normalizedUsername}`, {
