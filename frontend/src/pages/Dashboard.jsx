@@ -8,6 +8,7 @@ import { fetchStats, fetchAlerts, fetchAgents } from '../services/api';
 import { generateMockStats, generateMockAlerts, generateMockAgents } from '../services/mockData';
 import SeverityBadge from '../components/SeverityBadge';
 import useStore from '../store/useStore';
+import { shouldUseHostedDemoMode } from '../services/api';
 
 const SEVERITY_COLORS = {
   critical: '#f85149',
@@ -38,6 +39,10 @@ export default function Dashboard() {
   const { data: stats } = useQuery({
     queryKey: ['stats', range],
     queryFn: async () => {
+      if (shouldUseHostedDemoMode()) {
+        return generateMockStats(range);
+      }
+
       try {
         return await fetchStats(range);
       } catch {
@@ -51,6 +56,10 @@ export default function Dashboard() {
   const { data: alertsData } = useQuery({
     queryKey: ['dashboard-alerts'],
     queryFn: async () => {
+      if (shouldUseHostedDemoMode()) {
+        return generateMockAlerts(20, 24);
+      }
+
       try {
         const res = await fetchAlerts({ limit: 20 });
         return Array.isArray(res?.alerts) ? res.alerts : generateMockAlerts(20, 24);
@@ -65,6 +74,10 @@ export default function Dashboard() {
   const { data: agentsData } = useQuery({
     queryKey: ['dashboard-agents'],
     queryFn: async () => {
+      if (shouldUseHostedDemoMode()) {
+        return generateMockAgents();
+      }
+
       try {
         const res = await fetchAgents();
         return Array.isArray(res?.agents) ? res.agents : generateMockAgents();

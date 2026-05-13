@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { fetchRules } from '../services/api';
 import { generateMockRules, generateMockAlerts } from '../services/mockData';
 import SeverityBadge from '../components/SeverityBadge';
+import { shouldUseHostedDemoMode } from '../services/api';
 
 export default function Rules() {
   const [selectedRule, setSelectedRule] = useState(null);
@@ -13,6 +14,10 @@ export default function Rules() {
   const { data: rulesData } = useQuery({
     queryKey: ['rules'],
     queryFn: async () => {
+      if (shouldUseHostedDemoMode()) {
+        return generateMockRules();
+      }
+
       try {
         const res = await fetchRules();
         // Add sparkline trend data

@@ -1,6 +1,10 @@
 import axios from 'axios';
 import mockData from './mockData';
 
+export const isHostedFrontend = typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app');
+export const hasConfiguredApi = Boolean(import.meta.env.VITE_API_URL);
+export const shouldUseHostedDemoMode = () => isHostedFrontend && !hasConfiguredApi;
+
 let getTokens = () => ({ accessToken: null });
 let refreshInterceptorFn = null;
 let refreshRequestPromise = null;

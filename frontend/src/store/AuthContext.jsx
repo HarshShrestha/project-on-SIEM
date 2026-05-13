@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import useStore from './useStore';
-import api from '../services/api';
+import api, { shouldUseHostedDemoMode } from '../services/api';
 
 let hydrationRefreshPromise = null;
 
@@ -9,10 +9,6 @@ const DEMO_USERS = {
   analyst: { password: 'analyst123', role: 'analyst', email: 'analyst@siem.local' },
   viewer: { password: 'viewer123', role: 'viewer', email: 'viewer@siem.local' },
 };
-
-const isHostedFrontend = typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app');
-const hasConfiguredApi = Boolean(import.meta.env.VITE_API_URL);
-const canUseDemoAuth = isHostedFrontend && !hasConfiguredApi;
 
 const createDemoAuthError = (message) => {
   const error = new Error(message);
@@ -37,26 +33,26 @@ export const useAuth = () => {
   const store = useStore();
 
   const login = async (username, password) => {
+    if (shouldUseHostedDemoMode()) {
+      const normalizedUsername = String(username || '').trim().toLowerCase();
+      const demoUser = DEMO_USERS[normalizedUsername];
+
+      if (demoUser && password === demoUser.password) {
+        store.setAuth(`demo-${normalizedUsername}`, {
+          username: normalizedUsername,
+          email: demoUser.email,
+          role: demoUser.role,
+        }, 'demo');
+        return;
+      }
+
+      throw createDemoAuthError('Demo login failed. Use admin/admin123, analyst/analyst123, or viewer/viewer123.');
+    }
+
     try {
       const response = await api.post('/auth/login', { username, password });
       store.setAuth(response.data.accessToken, response.data.user, 'real');
     } catch (err) {
-      if (canUseDemoAuth) {
-        const normalizedUsername = String(username || '').trim().toLowerCase();
-        const demoUser = DEMO_USERS[normalizedUsername];
-
-        if (demoUser && password === demoUser.password) {
-          store.setAuth(`demo-${normalizedUsername}`, {
-            username: normalizedUsername,
-            email: demoUser.email,
-            role: demoUser.role,
-          }, 'demo');
-          return;
-        }
-
-        throw createDemoAuthError('Demo login failed. Use admin/admin123, analyst/analyst123, or viewer/viewer123.');
-      }
-
       throw err;
     }
   };
@@ -96,6 +92,11 @@ export const AuthProvider = ({ children }) => {
   const { setAuth, clearAuth, setLoading, user } = useStore();
 
   useEffect(() => {
+    if (shouldUseHostedDemoMode() && !user) {
+      setLoading(false);
+      return;
+    }
+
     if (useStore.getState().authMode === 'demo') {
       setLoading(false);
       return;

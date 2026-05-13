@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { fetchAgents, fetchAgentLogs } from '../services/api';
 import { generateMockAgents, generateMockAgentLogs, generateMockStats } from '../services/mockData';
 import { StatusBadge } from '../components/SeverityBadge';
+import { shouldUseHostedDemoMode } from '../services/api';
 
 export default function Agents() {
   const [selectedAgent, setSelectedAgent] = useState(null);
@@ -15,6 +16,10 @@ export default function Agents() {
   const { data: agentsData } = useQuery({
     queryKey: ['agents'],
     queryFn: async () => {
+      if (shouldUseHostedDemoMode()) {
+        return generateMockAgents();
+      }
+
       try {
         const res = await fetchAgents();
         return res.agents;
@@ -32,6 +37,11 @@ export default function Agents() {
     queryKey: ['agent-logs', selectedAgent?.id],
     queryFn: async () => {
       if (!selectedAgent) return [];
+
+      if (shouldUseHostedDemoMode()) {
+        return generateMockAgentLogs(selectedAgent.id, 50);
+      }
+
       try {
         const res = await fetchAgentLogs(selectedAgent.id, 50);
         return res.logs;

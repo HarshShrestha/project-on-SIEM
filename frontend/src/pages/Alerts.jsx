@@ -7,6 +7,7 @@ import { fetchAlerts } from '../services/api';
 import { generateMockAlerts } from '../services/mockData';
 import SeverityBadge, { getSeverityFromLevel } from '../components/SeverityBadge';
 import useStore from '../store/useStore';
+import { shouldUseHostedDemoMode } from '../services/api';
 
 export default function Alerts() {
   const { alertFilters, setAlertFilters } = useStore();
@@ -18,6 +19,34 @@ export default function Alerts() {
   const { data, isLoading } = useQuery({
     queryKey: ['alerts', alertFilters],
     queryFn: async () => {
+      if (shouldUseHostedDemoMode()) {
+        const all = generateMockAlerts(500, 168);
+        let filtered = all;
+        if (alertFilters.search) {
+          const s = alertFilters.search.toLowerCase();
+          filtered = filtered.filter(
+            (a) =>
+              a.rule?.description?.toLowerCase().includes(s) ||
+              a.agent?.name?.toLowerCase().includes(s)
+          );
+        }
+        if (alertFilters.level) {
+          filtered = filtered.filter((a) => a.rule?.level >= Number(alertFilters.level));
+        }
+        if (alertFilters.agent_id) {
+          filtered = filtered.filter((a) => a.agent?.id === alertFilters.agent_id);
+        }
+        const page = alertFilters.page || 1;
+        const limit = alertFilters.limit || 50;
+        const start = (page - 1) * limit;
+        return {
+          alerts: filtered.slice(start, start + limit),
+          total: filtered.length,
+          page,
+          pages: Math.ceil(filtered.length / limit),
+        };
+      }
+
       try {
         return await fetchAlerts(alertFilters);
       } catch {
