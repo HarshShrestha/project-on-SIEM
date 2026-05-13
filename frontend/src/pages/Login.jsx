@@ -39,7 +39,7 @@ const Login = () => {
       } else if (err.response?.status === 401) {
         setErrorMsg('Invalid credentials');
       } else if (err.response?.status === 405) {
-        setErrorMsg('Login endpoint is misrouted in deployment. Configure VITE_API_URL to your backend API base URL.');
+        setErrorMsg('This deployment is running without a backend API. Use the demo credentials: admin/admin123, analyst/analyst123, or viewer/viewer123.');
       } else if (err.response?.status >= 500) {
         setErrorMsg(`Backend is unavailable (HTTP ${err.response.status}). Check API/nginx deployment logs.`);
       } else {

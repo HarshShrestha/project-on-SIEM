@@ -7,16 +7,19 @@ const useStore = create((set, get) => ({
   // in-memory access token exists. localStorage stores user profile for display only.
   token: null,
   user: JSON.parse(localStorage.getItem('siem_user') || 'null'),
+  authMode: localStorage.getItem('siem_auth_mode') || 'real',
   isAuthenticated: false, // Always starts false; set to true only after a valid token is obtained
   isLoading: !!localStorage.getItem('siem_user'), // Show spinner only if we have a stored session to restore
 
-  setAuth: (token, user) => {
+  setAuth: (token, user, authMode = 'real') => {
     if (user) localStorage.setItem('siem_user', JSON.stringify(user));
-    set({ token, user: user ?? JSON.parse(localStorage.getItem('siem_user') || 'null'), isAuthenticated: !!token, isLoading: false });
+    localStorage.setItem('siem_auth_mode', authMode);
+    set({ token, user: user ?? JSON.parse(localStorage.getItem('siem_user') || 'null'), authMode, isAuthenticated: !!token, isLoading: false });
   },
   clearAuth: () => {
     localStorage.removeItem('siem_user');
-    set({ token: null, user: null, isAuthenticated: false, isLoading: false });
+    localStorage.removeItem('siem_auth_mode');
+    set({ token: null, user: null, authMode: 'real', isAuthenticated: false, isLoading: false });
   },
   setLoading: (isLoading) => set({ isLoading }),
 

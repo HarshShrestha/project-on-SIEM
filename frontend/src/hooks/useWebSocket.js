@@ -10,6 +10,7 @@ const shouldDisableDefaultWsOnHosted = !import.meta.env.VITE_WS_URL && isHostedF
 export default function useWebSocket() {
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
+  const disableNoticeShown = useRef(false);
   const { setWsConnected, addLiveAlerts, incrementAlertCount } = useStore();
 
   const connect = useCallback(() => {
@@ -53,7 +54,9 @@ export default function useWebSocket() {
   useEffect(() => {
     if (shouldDisableDefaultWsOnHosted) {
       setWsConnected(false);
-      console.warn('[WS] Disabled on hosted frontend. Set VITE_WS_URL to your backend websocket endpoint.');
+      if (!disableNoticeShown.current) {
+        disableNoticeShown.current = true;
+      }
       return undefined;
     }
 
