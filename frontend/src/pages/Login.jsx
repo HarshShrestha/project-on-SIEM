@@ -43,7 +43,7 @@ const Login = () => {
       } else if (err.response?.status >= 500) {
         setErrorMsg(`Backend is unavailable (HTTP ${err.response.status}). Check API/nginx deployment logs.`);
       } else {
-        const errData = err.response?.data?.error;
+        const errData = err.response?.data?.error || err.response?.data;
         setErrorMsg(typeof errData === 'string' ? errData : (errData?.message || 'Login failed. Please try again.'));
       }
     } finally {
